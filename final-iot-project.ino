@@ -63,6 +63,12 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 Servo myServo;
 
+unsigned long servoStartTime = 0;
+unsigned long servoCooldownStart = 0;
+
+const unsigned long SERVO_COOLDOWN_TIME = 500;
+
+bool servoCoolingDown = false;
 // ==================================================
 // Blynk Virtual Pins
 // ==================================================
@@ -77,8 +83,6 @@ bool autoMode = true;
 bool servoBusy = false;
 bool previousObjectDetected = false;
 
-unsigned long servoStartTime = 0;
-
 // ==================================================
 // Function Declarations
 // ==================================================
@@ -92,9 +96,11 @@ long readUltrasonic();
 long microsecondsToCentimeters(long microseconds);
 int readLightSensor();
 
-void showOnLCD(long distance, int lightRaw);
+void showOnLCD(bool isAutoMode);
 void sendSensorData();
 void updateServo();
+bool canStartServo();
+void startServo();
 
 // ==================================================
 // Blynk Callbacks
@@ -121,14 +127,16 @@ BLYNK_CONNECTED() {
 
 // ปุ่ม Push สำหรับสั่ง Servo ใน Manual
 BLYNK_WRITE(V3) {
-  if (param.asInt() == 1 && !autoMode && !servoBusy) {
-    myServo.write(SERVO_ACTIVE_ANGLE);
-    servoStartTime = millis();
-    servoBusy = true;
-
-    Serial.println("Manual: Servo activated");
+  if (param.asInt() == 1 && !autoMode) {
+    if (canStartServo()) {
+      startServo();
+      Serial.println("Manual: Servo activated");
+    } else {
+      Serial.println("Manual: Servo busy or cooling down");
+    }
   }
 }
+
 
 // ==================================================
 // Setup
@@ -163,27 +171,27 @@ void loop() {
   currentDistance = distance;
   currentLightRaw = lightRaw;
 
-  showOnLCD(distance, lightRaw);
+  showOnLCD(autoMode);
 
-  bool objectDetected =
-      distance >= 0 && distance < DISTANCE_THRESHOLD;
+  
+bool objectDetected =
+    distance >= 0 && distance < DISTANCE_THRESHOLD;
 
   if (autoMode) {
-    // Auto: ทำงานเมื่อวัตถุเพิ่งเข้ามาในระยะ
+    // ทำงานเฉพาะตอนวัตถุเพิ่งเข้ามาในระยะ
     if (objectDetected &&
         !previousObjectDetected &&
-        !servoBusy) {
+        canStartServo()) {
 
-      myServo.write(SERVO_ACTIVE_ANGLE);
-      servoStartTime = millis();
-      servoBusy = true;
-
+      startServo();
       Serial.println("AUTO: Object detected");
     }
 
+    // บันทึกสถานะทุกครั้ง เพื่อป้องกันการสั่งซ้ำ
     previousObjectDetected = objectDetected;
+
   } else {
-    // Manual: Ultrasonic ไม่ควบคุม Servo
+    // Manual mode ไม่ให้ Ultrasonic ควบคุม Servo
     previousObjectDetected = false;
   }
 
@@ -200,12 +208,43 @@ void setupServo() {
   myServo.write(SERVO_HOME_ANGLE);
 }
 
+
+bool canStartServo() {
+  if (servoBusy) {
+    return false;
+  }
+
+  if (servoCoolingDown) {
+    if (millis() - servoCooldownStart < SERVO_COOLDOWN_TIME) {
+      return false;
+    }
+
+    servoCoolingDown = false;
+  }
+
+  return true;
+}
+
+void startServo() {
+  if (!canStartServo()) {
+    return;
+  }
+
+  myServo.write(SERVO_ACTIVE_ANGLE);
+  servoStartTime = millis();
+  servoBusy = true;
+}
+
 void updateServo() {
   if (servoBusy &&
       millis() - servoStartTime >= SERVO_ACTION_TIME) {
 
     myServo.write(SERVO_HOME_ANGLE);
     servoBusy = false;
+
+    // เริ่มนับเวลาพักหลังกลับตำแหน่งเริ่มต้น
+    servoCooldownStart = millis();
+    servoCoolingDown = true;
 
     Serial.println("Servo returned to home");
   }
@@ -223,24 +262,29 @@ void setupLCD() {
   lcd.clear();
 }
 
-void showOnLCD(long distance, int lightRaw) {
-  lcd.setCursor(0, 0);
-  lcd.print("Dist: ");
 
-  if (distance < 0) {
-    lcd.print("Error");
-  } else {
-    lcd.print(distance);
-    lcd.print(" cm");
+unsigned long lastLCDUpdate = 0;
+const unsigned long LCD_INTERVAL = 250;
+
+void showOnLCD(bool isAutoMode) {
+  if (millis() - lastLCDUpdate < LCD_INTERVAL) {
+    return;
   }
 
-  lcd.print("       ");
+  lastLCDUpdate = millis();
+
+  lcd.setCursor(0, 0);
+  lcd.print("ESP32 SYSTEM    ");
 
   lcd.setCursor(0, 1);
-  lcd.print("Light: ");
-  lcd.print(lightRaw);
-  lcd.print("       ");
+
+  if (isAutoMode) {
+    lcd.print("MODE: AUTO      ");
+  } else {
+    lcd.print("MODE: MANUAL    ");
+  }
 }
+
 
 // ==================================================
 // Ultrasonic
