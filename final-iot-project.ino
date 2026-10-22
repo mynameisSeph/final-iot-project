@@ -59,7 +59,7 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 #define SERVO_PIN 12
 #define SERVO_HOME_ANGLE 0
 #define SERVO_ACTIVE_ANGLE 90
-#define SERVO_ACTION_TIME 1500
+#define SERVO_ACTION_TIME 1000
 
 Servo myServo;
 
