@@ -162,43 +162,60 @@ void setup() {
 }
 
 // ==================================================
-// Main Loop
+// Sensor Timing
 // ==================================================
 
+unsigned long lastUltrasonicRead = 0;
+unsigned long lastLDRRead = 0;
+
+const unsigned long ULTRASONIC_INTERVAL = 300;
+const unsigned long LDR_INTERVAL = 500;
+
+// ==================================================
+// Main Loop
+// ==================================================
 void loop() {
   Blynk.run();
   timer.run();
 
-  long distance = readUltrasonic();
-  int lightRaw = readLightSensor();
+  unsigned long now = millis();
 
-  currentDistance = distance;
-  currentLightRaw = lightRaw;
+  // อ่าน Ultrasonic ทุก 300 ms
+  if (now - lastUltrasonicRead >= ULTRASONIC_INTERVAL) {
+    lastUltrasonicRead = now;
+    currentDistance = readUltrasonic();
 
-  showOnLCD(autoMode);
+    bool objectDetected =
+      currentDistance >= 0 &&
+      currentDistance < DISTANCE_THRESHOLD;
 
-  
-bool objectDetected =
-    distance >= 0 && distance < DISTANCE_THRESHOLD;
+    if (autoMode) {
+      // สั่ง Servo เฉพาะตอนวัตถุเพิ่งเข้ามาในระยะ
+      if (objectDetected &&
+          !previousObjectDetected &&
+          canStartServo()) {
 
-  if (autoMode) {
-    // ทำงานเฉพาะตอนวัตถุเพิ่งเข้ามาในระยะ
-    if (objectDetected &&
-        !previousObjectDetected &&
-        canStartServo()) {
+        startServo();
+        Serial.println("AUTO: Object detected");
+      }
 
-      startServo();
-      Serial.println("AUTO: Object detected");
+      previousObjectDetected = objectDetected;
+
+    } else {
+      previousObjectDetected = false;
     }
-
-    // บันทึกสถานะทุกครั้ง เพื่อป้องกันการสั่งซ้ำ
-    previousObjectDetected = objectDetected;
-
-  } else {
-    // Manual mode ไม่ให้ Ultrasonic ควบคุม Servo
-    previousObjectDetected = false;
   }
 
+  // อ่าน LDR ทุก 500 ms
+  if (now - lastLDRRead >= LDR_INTERVAL) {
+    lastLDRRead = now;
+    currentLightRaw = readLightSensor();
+  }
+
+  // แสดงสถานะบน LCD ตามช่วงเวลาที่กำหนดไว้เดิม
+  showOnLCD(autoMode);
+
+  // ต้องเรียกต่อเนื่องเพื่อให้ Servo กลับตำแหน่งตามเวลา
   updateServo();
 }
 
