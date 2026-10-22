@@ -349,7 +349,15 @@ void setupLightSensor() {
 }
 
 int readLightSensor() {
-  return analogRead(LDR_AO_PIN);
+  // return analogRead(LDR_AO_PIN);
+  long total = 0;
+
+  for (int i = 0; i < 10; i++) {
+    total += analogRead(LDR_AO_PIN);
+    delay(2);
+  }
+
+  return total / 10;
 }
 
 // ==================================================
