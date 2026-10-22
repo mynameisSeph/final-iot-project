@@ -35,14 +35,14 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 #define TRIG_PIN 17
 #define ECHO_PIN 18
-#define DISTANCE_THRESHOLD 18
+#define DISTANCE_THRESHOLD 10
 
 // ==================================================
 // LDR
 // ==================================================
 
 #define LDR_AO_PIN 34
-#define LIGHT_THRESHOLD 600
+#define LIGHT_THRESHOLD 700
 
 // ==================================================
 // Relay (ยังไม่ได้เปิดใช้งานในโค้ดนี้)
@@ -59,7 +59,7 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 #define SERVO_PIN 12
 #define SERVO_HOME_ANGLE 0
 #define SERVO_ACTIVE_ANGLE 90
-#define SERVO_ACTION_TIME 500
+#define SERVO_ACTION_TIME 1500
 
 Servo myServo;
 
@@ -144,6 +144,10 @@ BLYNK_WRITE(V3) {
 
 void setup() {
   Serial.begin(115200);
+
+  // Relay: ON
+  pinMode(RELAY_IN_PIN, OUTPUT);
+  digitalWrite(RELAY_IN_PIN, RELAY_ON);
 
   setupLCD();
   setupServo();
@@ -343,6 +347,15 @@ void sendSensorData() {
   }
 
   Blynk.virtualWrite(V1, currentLightRaw);
+
+   // เงื่อนไขตรวจสอบค่าแสง
+  if (currentLightRaw > LIGHT_THRESHOLD) {
+    digitalWrite(RELAY_IN_PIN, RELAY_ON);
+    Blynk.virtualWrite(V4, "Ball Detected");
+  } else {
+    digitalWrite(RELAY_IN_PIN, RELAY_OFF);
+    Blynk.virtualWrite(V4, "No Ball Detected");
+  }
 
   Serial.print("Distance: ");
   Serial.print(currentDistance);
